@@ -52,17 +52,17 @@ namespace platf::virtual_mic {
     }
 
     if (render_client_) {
-      Release(render_client_);
+      ((IAudioRenderClient *) render_client_)->Release();
       render_client_ = nullptr;
     }
 
     if (audio_client_) {
-      Release(audio_client_);
+      ((IAudioClient *) audio_client_)->Release();
       audio_client_ = nullptr;
     }
 
     if (device_) {
-      Release(device_);
+      ((IMMDevice *) device_)->Release();
       device_ = nullptr;
     }
   }
