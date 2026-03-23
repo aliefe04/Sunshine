@@ -874,6 +874,58 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### mic_passthrough
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Enable microphone passthrough from the Moonlight client to a virtual audio device on the host.
+            When enabled, the client's microphone audio is decoded and routed to a virtual audio cable
+            (e.g. VB-Audio Virtual Cable on Windows) so host applications can use it as a microphone source.
+            @note{Requires VB-Cable or a compatible virtual audio device to be installed on the host (Windows only).}
+            @note{The Moonlight client must also enable microphone passthrough in its Audio Settings.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            mic_passthrough = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### mic_virtual_device
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Friendly name (or substring) of the virtual audio render device to use for microphone passthrough output.
+            Leave blank to auto-detect VB-Audio Virtual Cable ("CABLE Input").
+            @note{This option is only used on Windows when [mic_passthrough](#mic_passthrough) is enabled.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            mic_virtual_device = CABLE Input
+            @endcode</td>
+    </tr>
+</table>
+
 ### adapter_name
 
 <table>
