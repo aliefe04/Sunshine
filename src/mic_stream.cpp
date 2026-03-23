@@ -16,7 +16,7 @@ namespace mic_stream {
 
   mic_stream_manager_t g_mic_stream_manager;
 
-  mic_stream_t::mic_stream_t(const config_t &config) :
+  mic_stream_t::mic_stream_t(const config_t &config):
       config_(config) {
     pcm_buffer_.resize(SAMPLES_PER_FRAME * config_.channels);
   }
@@ -91,9 +91,7 @@ namespace mic_stream {
     }
 
     // Decode Opus to PCM
-    int samples = opus_decode(opus_decoder_, data, size,
-                              pcm_buffer_.data(), SAMPLES_PER_FRAME,
-                              0 /* decode_fec */);
+    int samples = opus_decode(opus_decoder_, data, size, pcm_buffer_.data(), SAMPLES_PER_FRAME, 0 /* decode_fec */);
 
     if (samples < 0) {
       BOOST_LOG(error) << "Opus decode failed: "sv << opus_strerror(samples);
