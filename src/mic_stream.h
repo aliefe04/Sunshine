@@ -18,7 +18,7 @@
 
 // Platform-specific virtual mic output
 #ifdef _WIN32
-#include "platform/windows/virtual_mic.h"
+  #include "platform/windows/virtual_mic.h"
 #endif
 
 namespace mic_stream {
@@ -68,12 +68,16 @@ namespace mic_stream {
     /**
      * @brief Check if the stream is active.
      */
-    bool is_active() const { return active_; }
+    bool is_active() const {
+      return active_;
+    }
 
     /**
      * @brief Get the configuration.
      */
-    const config_t &config() const { return config_; }
+    const config_t &config() const {
+      return config_;
+    }
 
   private:
     config_t config_;

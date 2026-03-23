@@ -43,7 +43,9 @@ namespace platf::virtual_mic {
     /**
      * @brief Check if the virtual mic is active.
      */
-    bool is_active() const { return active_; }
+    bool is_active() const {
+      return active_;
+    }
 
   private:
     /**
@@ -58,10 +60,10 @@ namespace platf::virtual_mic {
     int sample_rate_ = 48000;
 
     // WASAPI objects (using void* to avoid Windows header pollution)
-    void *device_ = nullptr;           // IMMDevice
-    void *audio_client_ = nullptr;     // IAudioClient
-    void *render_client_ = nullptr;    // IAudioRenderClient
-    void *event_handle_ = nullptr;     // HANDLE
+    void *device_ = nullptr;  // IMMDevice
+    void *audio_client_ = nullptr;  // IAudioClient
+    void *render_client_ = nullptr;  // IAudioRenderClient
+    void *event_handle_ = nullptr;  // HANDLE
 
     // Buffer for format conversion
     std::vector<int16_t> int16_buffer_;
