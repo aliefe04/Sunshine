@@ -10,7 +10,7 @@
 #include <vector>
 
 // local includes
-#include "mic_stream.h"
+#include "src/mic_stream.h"
 
 namespace platf::virtual_mic {
   /**
