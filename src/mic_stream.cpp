@@ -11,6 +11,11 @@
 #include "logging.h"
 #include "mic_stream.h"
 
+// Platform-specific includes
+#ifdef _WIN32
+  #include "platform/windows/virtual_mic.h"
+#endif
+
 namespace mic_stream {
   using namespace std::literals;
 

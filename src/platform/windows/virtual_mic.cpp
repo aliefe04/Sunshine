@@ -9,6 +9,7 @@
 // platform includes
 #include <Audioclient.h>
 #include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 
 // local includes
 #include "src/config.h"
@@ -39,7 +40,6 @@ namespace platf::virtual_mic {
   using render_client_t = std::unique_ptr<IAudioRenderClient, decltype(&Release<IAudioRenderClient>)>;
   using wave_format_t = std::unique_ptr<WAVEFORMATEX, decltype(&co_task_free<WAVEFORMATEX>)>;
   using wstring_t = std::unique_ptr<WCHAR, decltype(&co_task_free<WCHAR>)>;
-  using handle_t = std::unique_ptr<void, decltype(&CloseHandle)>;
 
   virtual_mic_output_t::~virtual_mic_output_t() {
     active_ = false;

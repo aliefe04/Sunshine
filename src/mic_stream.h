@@ -16,9 +16,11 @@
 #include "thread_safe.h"
 #include "utility.h"
 
-// Platform-specific virtual mic output
+// Platform-specific forward declarations
 #ifdef _WIN32
-  #include "platform/windows/virtual_mic.h"
+namespace platf::virtual_mic {
+  class virtual_mic_output_t;
+}
 #endif
 
 namespace mic_stream {

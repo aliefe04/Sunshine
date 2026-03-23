@@ -10,9 +10,12 @@
 #include <vector>
 
 // local includes
-#include "src/mic_stream.h"
+#include "src/logging.h"
 
 namespace platf::virtual_mic {
+  // Constants for mic stream
+  constexpr auto SAMPLES_PER_FRAME = 960;  // 48kHz * 20ms
+
   /**
    * @brief Windows virtual microphone output using WASAPI.
    * Outputs decoded mic audio to a virtual audio device (e.g., VB-Audio Virtual Cable).
