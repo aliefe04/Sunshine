@@ -20,7 +20,9 @@
 // - NV_ENC_*_VER definitions where the value inside NVENCAPI_STRUCT_VERSION() was increased
 // - Incompatible struct changes in nvEncodeAPI.h (fields removed, semantics changed, etc.)
 // - Test both old and new drivers with all supported codecs
-#if NVENCAPI_VERSION != MAKE_NVENC_VER(12U, 0U)
+// Support NVENC SDK 12.0 and 13.0.
+// NVENC 13.0 replaced pixelBitDepthMinus8 with NV_ENC_BIT_DEPTH enum fields.
+#if NVENCAPI_VERSION != MAKE_NVENC_VER(12U, 0U) && NVENCAPI_VERSION != MAKE_NVENC_VER(13U, 0U)
   #error Check and update NVENC code for backwards compatibility!
 #endif
 
@@ -333,7 +335,12 @@ namespace nvenc {
           auto &format_config = enc_config.encodeCodecConfig.hevcConfig;
           set_h264_hevc_common_format_config(format_config);
           if (buffer_is_10bit()) {
+#if NVENCAPI_VERSION >= MAKE_NVENC_VER(13U, 0U)
+            format_config.outputBitDepth = NV_ENC_BIT_DEPTH_10;
+            format_config.inputBitDepth = NV_ENC_BIT_DEPTH_10;
+#else
             format_config.pixelBitDepthMinus8 = 2;
+#endif
           }
           set_ref_frames(format_config.maxNumRefFramesInDPB, format_config.numRefL0, 5);
           set_minqp_if_enabled(config.min_qp_hevc);
@@ -366,8 +373,13 @@ namespace nvenc {
           }
           format_config.enableBitstreamPadding = config.insert_filler_data;
           if (buffer_is_10bit()) {
+#if NVENCAPI_VERSION >= MAKE_NVENC_VER(13U, 0U)
+            format_config.outputBitDepth = NV_ENC_BIT_DEPTH_10;
+            format_config.inputBitDepth = NV_ENC_BIT_DEPTH_10;
+#else
             format_config.inputPixelBitDepthMinus8 = 2;
             format_config.pixelBitDepthMinus8 = 2;
+#endif
           }
           format_config.colorPrimaries = colorspace.primaries;
           format_config.transferCharacteristics = colorspace.tranfer_function;
