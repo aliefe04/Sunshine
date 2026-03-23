@@ -83,7 +83,7 @@ namespace mic_stream {
     config_t config_;
     OpusDecoder *opus_decoder_ = nullptr;
     bool active_ = false;
-    std::vector<float> pcm_buffer_;
+    std::vector<opus_int16> pcm_buffer_;  // 16-bit signed PCM samples
     std::mutex mutex_;
 
     // Platform-specific virtual mic output

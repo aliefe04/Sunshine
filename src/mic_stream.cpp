@@ -34,10 +34,10 @@ namespace mic_stream {
     }
 
     // Create Opus decoder
-    int error = 0;
-    opus_decoder_ = opus_decoder_create(config_.sample_rate, config_.channels, &error);
-    if (error != OPUS_OK) {
-      BOOST_LOG(error) << "Failed to create Opus decoder: "sv << opus_strerror(error);
+    int opus_error = 0;
+    opus_decoder_ = opus_decoder_create(config_.sample_rate, config_.channels, &opus_error);
+    if (opus_error != OPUS_OK) {
+      BOOST_LOG(error) << "Failed to create Opus decoder: "sv << opus_strerror(opus_error);
       return -1;
     }
 

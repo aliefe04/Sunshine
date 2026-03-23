@@ -977,6 +977,7 @@ namespace rtsp_stream {
       mic_passthrough_requested = true;
       // TODO: Parse mic info and store in session for later use
     }
+    (void)mic_passthrough_requested;  // Suppress unused variable warning until TODO is implemented
 
     stream::config_t config;
 
