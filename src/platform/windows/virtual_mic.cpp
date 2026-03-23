@@ -21,12 +21,16 @@ namespace platf::virtual_mic {
   // RAII wrappers for COM objects
   template<class T>
   void Release(T *p) {
-    if (p) p->Release();
+    if (p) {
+      p->Release();
+    }
   }
 
   template<class T>
   void co_task_free(T *p) {
-    if (p) CoTaskMemFree(p);
+    if (p) {
+      CoTaskMemFree(p);
+    }
   }
 
   using device_enum_t = std::unique_ptr<IMMDeviceEnumerator, decltype(&Release<IMMDeviceEnumerator>)>;
@@ -94,7 +98,9 @@ namespace platf::virtual_mic {
     for (UINT i = 0; i < count; i++) {
       IMMDevice *device = nullptr;
       status = collection->Item(i, &device);
-      if (FAILED(status)) continue;
+      if (FAILED(status)) {
+        continue;
+      }
 
       // Get device friendly name
       IPropertyStore *props = nullptr;
@@ -161,12 +167,7 @@ namespace platf::virtual_mic {
 
     // Activate audio client
     IAudioClient *audio_client_raw = nullptr;
-    status = ((IMMDevice *) device_)->Activate(
-      __uuidof(IAudioClient),
-      CLSCTX_ALL,
-      nullptr,
-      (void **) &audio_client_raw
-    );
+    status = ((IMMDevice *) device_)->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void **) &audio_client_raw);
 
     if (FAILED(status)) {
       BOOST_LOG(error) << "Couldn't activate audio client: [0x"sv << util::hex(status).to_string_view() << ']';
@@ -311,8 +312,12 @@ namespace platf::virtual_mic {
     for (int i = 0; i < samples * channels_; i++) {
       float sample = pcm_data[i];
       // Clamp to [-1, 1]
-      if (sample > 1.0f) sample = 1.0f;
-      if (sample < -1.0f) sample = -1.0f;
+      if (sample > 1.0f) {
+        sample = 1.0f;
+      }
+      if (sample < -1.0f) {
+        sample = -1.0f;
+      }
       // Convert to int16
       int16_buffer_[i] = (int16_t) (sample * 32767.0f);
     }

@@ -1149,8 +1149,8 @@ namespace stream {
       auto opus_data = payload.substr(sizeof(SS_MIC_DATA_PACKET) - sizeof(NV_INPUT_HEADER));
 
       BOOST_LOG(verbose) << "Mic data: audio_input_id=" << (int) audio_input_id
-                        << ", frame_index=" << frame_index
-                        << ", opus_size=" << opus_data.size();
+                         << ", frame_index=" << frame_index
+                         << ", opus_size=" << opus_data.size();
 
       // Get the mic stream and process the Opus data
       auto stream = mic_stream::g_mic_stream_manager.get_stream(audio_input_id);
@@ -1614,13 +1614,11 @@ namespace stream {
               session->video.cipher->encrypt(std::string_view {(char *) inspect, (size_t) blocksize}, prefix->tag, (uint8_t *) inspect, &iv);
             }
 
-            if (x - next_shard_to_send + 1 >= send_batch_size ||
-                x + 1 == shards.size()) {
+            if (x - next_shard_to_send + 1 >= send_batch_size || x + 1 == shards.size()) {
               // Do pacing within the frame.
               // Also trigger pacing before the first send_batch() of the frame
               // to account for the last send_batch() of the previous frame.
-              if (ratecontrol_group_packets_sent >= ratecontrol_packets_in_1ms ||
-                  ratecontrol_frame_packets_sent == 0) {
+              if (ratecontrol_group_packets_sent >= ratecontrol_packets_in_1ms || ratecontrol_frame_packets_sent == 0) {
                 auto due = ratecontrol_frame_start +
                            std::chrono::duration_cast<std::chrono::nanoseconds>(1ms) *
                              ratecontrol_frame_packets_sent / ratecontrol_packets_in_1ms;
