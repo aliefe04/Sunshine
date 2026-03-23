@@ -969,15 +969,12 @@ namespace rtsp_stream {
     // Parse mic passthrough info if present
     // Format: micInfo:codec,channels,sample_rate,bitrate
     // Example: micInfo:micop,1,48000,64000
-    bool mic_passthrough_requested = false;
     auto mic_info_it = args.find("x-ss-general.micInfo"sv);
     if (mic_info_it != args.end() && config::audio.mic_passthrough) {
       std::string_view mic_info = mic_info_it->second;
       BOOST_LOG(info) << "Client requested mic passthrough: "sv << mic_info;
-      mic_passthrough_requested = true;
       // TODO: Parse mic info and store in session for later use
     }
-    (void)mic_passthrough_requested;  // Suppress unused warning
 
     stream::config_t config;
 
