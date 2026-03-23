@@ -38,7 +38,7 @@ namespace platf::virtual_mic {
      * @param samples Number of samples per channel.
      * @return 0 on success, non-zero on failure.
      */
-    int write_pcm(const float *pcm_data, int samples);
+    int write_pcm(const int16_t *pcm_data, int samples);
 
     /**
      * @brief Check if the virtual mic is active.
@@ -64,9 +64,6 @@ namespace platf::virtual_mic {
     void *audio_client_ = nullptr;  // IAudioClient
     void *render_client_ = nullptr;  // IAudioRenderClient
     void *event_handle_ = nullptr;  // HANDLE
-
-    // Buffer for format conversion
-    std::vector<int16_t> int16_buffer_;
   };
 
 }  // namespace platf::virtual_mic

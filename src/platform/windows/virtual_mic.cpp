@@ -261,15 +261,12 @@ namespace platf::virtual_mic {
       return -1;
     }
 
-    // Allocate conversion buffer
-    int16_buffer_.resize(SAMPLES_PER_FRAME * channels_);
-
     active_ = true;
     BOOST_LOG(info) << "Virtual mic output initialized successfully"sv;
     return 0;
   }
 
-  int virtual_mic_output_t::write_pcm(const float *pcm_data, int samples) {
+  int virtual_mic_output_t::write_pcm(const int16_t *pcm_data, int samples) {
     if (!active_ || !render_client_) {
       return -1;
     }
@@ -308,22 +305,8 @@ namespace platf::virtual_mic {
       return -1;
     }
 
-    // Convert float to int16
-    for (int i = 0; i < samples * channels_; i++) {
-      float sample = pcm_data[i];
-      // Clamp to [-1, 1]
-      if (sample > 1.0f) {
-        sample = 1.0f;
-      }
-      if (sample < -1.0f) {
-        sample = -1.0f;
-      }
-      // Convert to int16
-      int16_buffer_[i] = (int16_t) (sample * 32767.0f);
-    }
-
-    // Copy data to buffer
-    memcpy(data, int16_buffer_.data(), samples * channels_ * sizeof(int16_t));
+    // Copy int16 data directly to buffer
+    memcpy(data, pcm_data, samples * channels_ * sizeof(int16_t));
 
     // Release buffer
     status = render_client->ReleaseBuffer(samples, 0);
