@@ -785,6 +785,11 @@ namespace rtsp_stream {
     ss << "a=x-ss-general.encryptionSupported:" << encryption_flags_supported << std::endl;
     ss << "a=x-ss-general.encryptionRequested:" << encryption_flags_requested << std::endl;
 
+    // Advertise microphone passthrough support if enabled
+    if (config::audio.mic_passthrough) {
+      ss << "a=x-ss-general.micSupport:micop" << std::endl;
+    }
+
     if (video::last_encoder_probe_supported_ref_frames_invalidation) {
       ss << "a=x-nv-video[0].refPicInvalidation:1"sv << std::endl;
     }
@@ -960,6 +965,18 @@ namespace rtsp_stream {
     args.try_emplace("x-ss-video[0].chromaSamplingType"sv, "0"sv);
     args.try_emplace("x-ss-video[0].intraRefresh"sv, "0"sv);
     args.try_emplace("x-nv-video[0].clientRefreshRateX100"sv, "0"sv);
+
+    // Parse mic passthrough info if present
+    // Format: micInfo:codec,channels,sample_rate,bitrate
+    // Example: micInfo:micop,1,48000,64000
+    bool mic_passthrough_requested = false;
+    auto mic_info_it = args.find("x-ss-general.micInfo"sv);
+    if (mic_info_it != args.end() && config::audio.mic_passthrough) {
+      std::string_view mic_info = mic_info_it->second;
+      BOOST_LOG(info) << "Client requested mic passthrough: "sv << mic_info;
+      mic_passthrough_requested = true;
+      // TODO: Parse mic info and store in session for later use
+    }
 
     stream::config_t config;
 

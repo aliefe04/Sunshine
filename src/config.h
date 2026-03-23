@@ -149,6 +149,10 @@ namespace config {
     std::string virtual_sink;  ///< Virtual audio sink for audio routing
     bool stream;  ///< Enable audio streaming to clients
     bool install_steam_drivers;  ///< Install Steam audio drivers for enhanced compatibility
+
+    // Microphone passthrough configuration (Sunshine extension)
+    bool mic_passthrough;  ///< Enable microphone passthrough from client to host
+    std::string mic_virtual_device;  ///< Virtual audio device name for mic output (e.g., "CABLE Input (VB-Audio Virtual Cable)")
   };
 
   constexpr int ENCRYPTION_MODE_NEVER = 0;  // Never use video encryption, even if the client supports it

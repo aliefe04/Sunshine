@@ -25,6 +25,7 @@ extern "C" {
 #include "globals.h"
 #include "input.h"
 #include "logging.h"
+#include "mic_stream.h"
 #include "network.h"
 #include "platform/common.h"
 #include "process.h"
@@ -49,6 +50,9 @@ constexpr int IDX_RUMBLE_TRIGGER_DATA = 12;
 constexpr int IDX_SET_MOTION_EVENT = 13;
 constexpr int IDX_SET_RGB_LED = 14;
 constexpr int IDX_SET_ADAPTIVE_TRIGGERS = 15;
+constexpr int IDX_MIC_DATA = 16;
+constexpr int IDX_MIC_START = 17;
+constexpr int IDX_MIC_STOP = 18;
 
 static const short packetTypes[] = {
   0x0305,  // Start A
@@ -67,6 +71,9 @@ static const short packetTypes[] = {
   0x5501,  // Set motion event (Sunshine protocol extension)
   0x5502,  // Set RGB LED (Sunshine protocol extension)
   0x5503,  // Set Adaptive triggers (Sunshine protocol extension)
+  0x5508,  // Mic data (Sunshine protocol extension)
+  0x5509,  // Mic start (Sunshine protocol extension)
+  0x550A,  // Mic stop (Sunshine protocol extension)
 };
 
 namespace asio = boost::asio;
@@ -403,6 +410,17 @@ namespace stream {
       platf::feedback_queue_t feedback_queue;
       safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
     } control;
+
+    // Microphone passthrough state (Sunshine extension)
+    struct {
+      bool enabled = false;
+      std::uint8_t audio_input_id = 0;
+      std::uint16_t frame_index = 0;
+      // Mic config from client
+      std::uint8_t channels = 1;
+      std::uint32_t sample_rate = 48000;
+      std::uint32_t bitrate = 64000;
+    } mic;
 
     std::uint32_t launch_session_id;
 
@@ -1056,6 +1074,88 @@ namespace stream {
         input::passthrough(session->input, std::move(plaintext));
       } else {
         server->call(type, session, next_payload, true);
+      }
+    });
+
+    // Microphone passthrough handlers (Sunshine protocol extension)
+    server->map(packetTypes[IDX_MIC_START], [](session_t *session, const std::string_view &payload) {
+      BOOST_LOG(info) << "type [IDX_MIC_START] - Microphone passthrough start requested"sv;
+
+      if (!config::audio.mic_passthrough) {
+        BOOST_LOG(warning) << "Mic passthrough requested but not enabled in config"sv;
+        return;
+      }
+
+      // Parse mic start packet
+      if (payload.size() < sizeof(SS_MIC_START_PACKET) - sizeof(NV_INPUT_HEADER)) {
+        BOOST_LOG(error) << "Mic start packet too small"sv;
+        return;
+      }
+
+      auto *mic_start = (const SS_MIC_START_PACKET *) payload.data();
+      session->mic.enabled = true;
+      session->mic.audio_input_id = mic_start->audioInputId;
+      session->mic.channels = mic_start->channels;
+      session->mic.sample_rate = mic_start->sampleRate;
+      session->mic.bitrate = mic_start->bitrate;
+      session->mic.frame_index = 0;
+
+      // Start the mic stream
+      mic_stream::config_t config;
+      config.audio_input_id = mic_start->audioInputId;
+      config.channels = mic_start->channels;
+      config.sample_rate = mic_start->sampleRate;
+      config.bitrate = mic_start->bitrate;
+
+      auto stream = mic_stream::g_mic_stream_manager.start_stream(config);
+      if (!stream) {
+        BOOST_LOG(error) << "Failed to start mic stream"sv;
+        session->mic.enabled = false;
+        return;
+      }
+
+      BOOST_LOG(info) << "Mic passthrough started: channels=" << (int) session->mic.channels
+                      << ", sample_rate=" << session->mic.sample_rate
+                      << ", bitrate=" << session->mic.bitrate;
+    });
+
+    server->map(packetTypes[IDX_MIC_STOP], [](session_t *session, const std::string_view &payload) {
+      BOOST_LOG(info) << "type [IDX_MIC_STOP] - Microphone passthrough stop requested"sv;
+
+      // Stop the mic stream
+      mic_stream::g_mic_stream_manager.stop_stream(session->mic.audio_input_id);
+
+      session->mic.enabled = false;
+      session->mic.frame_index = 0;
+    });
+
+    server->map(packetTypes[IDX_MIC_DATA], [](session_t *session, const std::string_view &payload) {
+      if (!session->mic.enabled) {
+        BOOST_LOG(verbose) << "Mic data received but mic not enabled"sv;
+        return;
+      }
+
+      // Parse mic data packet header
+      if (payload.size() < sizeof(SS_MIC_DATA_PACKET) - sizeof(NV_INPUT_HEADER)) {
+        BOOST_LOG(error) << "Mic data packet too small"sv;
+        return;
+      }
+
+      auto *mic_data = (const SS_MIC_DATA_PACKET *) payload.data();
+      auto audio_input_id = mic_data->audioInputId;
+      auto frame_index = mic_data->frameIndex;
+
+      // Extract Opus payload
+      auto opus_data = payload.substr(sizeof(SS_MIC_DATA_PACKET) - sizeof(NV_INPUT_HEADER));
+
+      BOOST_LOG(verbose) << "Mic data: audio_input_id=" << (int) audio_input_id
+                        << ", frame_index=" << frame_index
+                        << ", opus_size=" << opus_data.size();
+
+      // Get the mic stream and process the Opus data
+      auto stream = mic_stream::g_mic_stream_manager.get_stream(audio_input_id);
+      if (stream) {
+        stream->process_opus_data((const uint8_t *) opus_data.data(), opus_data.size());
       }
     });
 
