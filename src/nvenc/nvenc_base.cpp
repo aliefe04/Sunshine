@@ -233,7 +233,9 @@ namespace nvenc {
       init_params.frameRateDen = fps.den;
     }
 
-    NV_ENC_PRESET_CONFIG preset_config = {min_struct_version(NV_ENC_PRESET_CONFIG_VER), {min_struct_version(NV_ENC_CONFIG_VER, 7, 8)}};
+    NV_ENC_PRESET_CONFIG preset_config = {};
+    preset_config.version = min_struct_version(NV_ENC_PRESET_CONFIG_VER);
+    preset_config.presetCfg.version = min_struct_version(NV_ENC_CONFIG_VER, 7, 8);
     if (nvenc_failed(nvenc->nvEncGetEncodePresetConfigEx(encoder, init_params.encodeGUID, init_params.presetGUID, init_params.tuningInfo, &preset_config))) {
       BOOST_LOG(error) << "NvEnc: NvEncGetEncodePresetConfigEx() failed: " << last_nvenc_error_string;
       return false;
