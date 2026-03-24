@@ -5,6 +5,7 @@
  * Finds a virtual audio cable device (e.g. VB-Audio Virtual Cable) and
  * renders decoded PCM audio to it so host applications see a microphone.
  */
+
 #pragma once
 
 // standard includes
@@ -13,6 +14,10 @@
 
 // lib includes
 #include <opus/opus.h>
+
+// Forward declarations for Media Foundation
+struct IMFTransform;
+struct IMFMediaType;
 
 namespace platf::virtual_mic {
 
@@ -64,10 +69,19 @@ namespace platf::virtual_mic {
 
     // Device (WASAPI mix) format — may differ from source
     int  dev_channels_    = 1;
+    int  dev_sample_rate_ = 48000;
     int  dev_block_align_ = 4;   ///< bytes per frame on the device
     bool dev_is_float_    = true; ///< true = IEEE float32, false = int16
 
     uint32_t buffer_frames_ = 0;  ///< Total WASAPI shared-mode buffer size in frames
+
+    // Resampler (Media Foundation) - used when device format differs from source
+    bool needs_resample_ = false;
+    IMFTransform *resampler_ = nullptr;
+    IMFMediaType *resampler_input_type_ = nullptr;
+    IMFMediaType *resampler_output_type_ = nullptr;
+    BYTE *resample_buffer_ = nullptr;
+    size_t resample_buffer_size_ = 0;
   };
 
 }  // namespace platf::virtual_mic

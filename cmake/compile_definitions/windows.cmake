@@ -98,6 +98,9 @@ list(PREPEND PLATFORM_LIBRARIES
         libssp.a
         libstdc++.a
         libwinpthread.a
+        mf
+        mfplat
+        mfuuid
         minhook::minhook
         ntdll
         setupapi
