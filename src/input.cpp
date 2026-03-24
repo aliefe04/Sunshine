@@ -1636,10 +1636,12 @@ namespace input {
         mic_stream::config_t cfg;
         cfg.audio_input_id = pkt->audioInputId;
         cfg.channels = pkt->channels > 0 ? pkt->channels : 1;
+        cfg.fec_percentage = pkt->fecPercentage;
         cfg.sample_rate = pkt->sampleRate > 0 ? pkt->sampleRate : 48000;
         cfg.bitrate = pkt->bitrate > 0 ? pkt->bitrate : 64000;
         BOOST_LOG(info) << "Mic START — id="sv << static_cast<int>(cfg.audio_input_id)
                         << ", ch="sv << static_cast<int>(cfg.channels)
+                        << ", fec="sv << static_cast<int>(cfg.fec_percentage) << "%"
                         << ", rate="sv << cfg.sample_rate
                         << ", bps="sv << cfg.bitrate;
         mic_stream::g_mic_stream_manager.start_stream(cfg);

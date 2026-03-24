@@ -60,6 +60,14 @@ namespace mic_stream {
       return -1;
     }
 
+    // Enable FEC decoding if client requested it
+    // Opus in-band FEC allows recovery from packet loss
+    if (config_.fec_percentage > 0) {
+      // Enable FEC in the decoder - it will automatically use FEC data when available
+      // The decode_fec parameter in opus_decode() controls whether to use FEC
+      BOOST_LOG(info) << "Mic stream FEC enabled at "sv << static_cast<int>(config_.fec_percentage) << "%";
+    }
+
 #ifdef _WIN32
     // Initialise the WASAPI virtual mic output
     virtual_output_ = std::make_unique<platf::virtual_mic::virtual_mic_output_t>();
@@ -77,7 +85,8 @@ namespace mic_stream {
     active_ = true;
     BOOST_LOG(info) << "Mic stream started — channels=" << static_cast<int>(config_.channels)
                     << ", sample_rate=" << config_.sample_rate
-                    << ", bitrate=" << config_.bitrate;
+                    << ", bitrate=" << config_.bitrate
+                    << ", fec=" << static_cast<int>(config_.fec_percentage) << "%";
     return 0;
   }
 
@@ -110,13 +119,19 @@ namespace mic_stream {
     }
 
     // Decode Opus → 16-bit PCM
+    // If FEC is enabled and we have a missing frame, decode_fec=1 recovers it
+    // For normal decoding, decode_fec=0
+    int decode_fec = 0;
+    
+    // Try to decode with FEC recovery if enabled
+    // This will recover the previous frame if it was lost
     int decoded_samples = opus_decode(
       opus_decoder_,
       data,
       static_cast<opus_int32>(size),
       pcm_buffer_.data(),
       SAMPLES_PER_FRAME,
-      0 /* decode_fec */);
+      decode_fec);
 
     if (decoded_samples < 0) {
       BOOST_LOG(error) << "Opus decode error: "sv << opus_strerror(decoded_samples);

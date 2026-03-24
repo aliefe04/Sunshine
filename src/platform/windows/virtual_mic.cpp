@@ -239,33 +239,83 @@ namespace platf::virtual_mic {
     return 0;
   }
 
-  // Simple linear interpolation resampling
-  static void resample_mono_to_stereo_float(const opus_int16 *src, float *dst,
-                                            int src_frames, int dst_frames,
-                                            double ratio) {
+  // Simple linear interpolation resampling with channel conversion
+  static void resample_with_channels_float(const opus_int16 *src, float *dst,
+                                           int src_frames, int dst_frames,
+                                           double ratio, int src_channels, int dst_channels) {
     for (int i = 0; i < dst_frames; i++) {
       double src_pos = static_cast<double>(i) / ratio;
       int src_idx = static_cast<int>(src_pos);
       double frac = src_pos - src_idx;
 
-      float s0 = (src_idx < src_frames) ? static_cast<float>(src[src_idx]) / 32768.0f : 0.0f;
-      float s1 = (src_idx + 1 < src_frames) ? static_cast<float>(src[src_idx + 1]) / 32768.0f : s0;
-
-      // Linear interpolation
-      float sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
-
-      // Mono to stereo (duplicate to both channels)
-      dst[i * 2] = sample;
-      dst[i * 2 + 1] = sample;
+      // For each output channel
+      for (int ch = 0; ch < dst_channels; ch++) {
+        float sample = 0.0f;
+        
+        if (src_channels == 1 && dst_channels >= 1) {
+          // Mono to stereo/multi-channel: duplicate mono to all channels
+          float s0 = (src_idx < src_frames) ? static_cast<float>(src[src_idx]) / 32768.0f : 0.0f;
+          float s1 = (src_idx + 1 < src_frames) ? static_cast<float>(src[src_idx + 1]) / 32768.0f : s0;
+          sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
+        } else if (src_channels >= 2 && dst_channels == 1) {
+          // Stereo/multi-channel to mono: average all input channels
+          float s0 = 0.0f, s1 = 0.0f;
+          for (int sc = 0; sc < src_channels; sc++) {
+            if (src_idx < src_frames) {
+              s0 += static_cast<float>(src[src_idx * src_channels + sc]) / 32768.0f;
+            }
+            if (src_idx + 1 < src_frames) {
+              s1 += static_cast<float>(src[(src_idx + 1) * src_channels + sc]) / 32768.0f;
+            }
+          }
+          s0 /= src_channels;
+          s1 /= src_channels;
+          sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
+        } else if (src_channels >= dst_channels) {
+          // Downmix or same channel count: take first N channels
+          float s0 = (src_idx < src_frames) ? static_cast<float>(src[src_idx * src_channels + ch]) / 32768.0f : 0.0f;
+          float s1 = (src_idx + 1 < src_frames) ? static_cast<float>(src[(src_idx + 1) * src_channels + ch]) / 32768.0f : s0;
+          sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
+        } else {
+          // Upmix: duplicate channels
+          int src_ch = ch % src_channels;
+          float s0 = (src_idx < src_frames) ? static_cast<float>(src[src_idx * src_channels + src_ch]) / 32768.0f : 0.0f;
+          float s1 = (src_idx + 1 < src_frames) ? static_cast<float>(src[(src_idx + 1) * src_channels + src_ch]) / 32768.0f : s0;
+          sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
+        }
+        
+        dst[i * dst_channels + ch] = sample;
+      }
     }
   }
 
   // Direct copy with format conversion (no resampling)
-  static void convert_mono_to_stereo_float(const opus_int16 *src, float *dst, int frames) {
+  static void convert_with_channels_float(const opus_int16 *src, float *dst, int frames,
+                                          int src_channels, int dst_channels) {
     for (int i = 0; i < frames; i++) {
-      float sample = static_cast<float>(src[i]) / 32768.0f;
-      dst[i * 2] = sample;
-      dst[i * 2 + 1] = sample;
+      for (int ch = 0; ch < dst_channels; ch++) {
+        float sample = 0.0f;
+        
+        if (src_channels == 1 && dst_channels >= 1) {
+          // Mono to stereo/multi-channel: duplicate mono to all channels
+          sample = static_cast<float>(src[i]) / 32768.0f;
+        } else if (src_channels >= 2 && dst_channels == 1) {
+          // Stereo/multi-channel to mono: average all input channels
+          for (int sc = 0; sc < src_channels; sc++) {
+            sample += static_cast<float>(src[i * src_channels + sc]) / 32768.0f;
+          }
+          sample /= src_channels;
+        } else if (src_channels >= dst_channels) {
+          // Downmix or same: take first N channels
+          sample = static_cast<float>(src[i * src_channels + ch]) / 32768.0f;
+        } else {
+          // Upmix: duplicate channels
+          int src_ch = ch % src_channels;
+          sample = static_cast<float>(src[i * src_channels + src_ch]) / 32768.0f;
+        }
+        
+        dst[i * dst_channels + ch] = sample;
+      }
     }
   }
 
@@ -328,10 +378,12 @@ namespace platf::virtual_mic {
 
       if (sample_ratio_ != 1.0) {
         // Resample from src_sample_rate to dev_sample_rate
-        resample_mono_to_stereo_float(data, fbuf, frames, static_cast<int>(write_frames), sample_ratio_);
+        resample_with_channels_float(data, fbuf, frames, static_cast<int>(write_frames),
+                                     sample_ratio_, src_channels_, dev_channels_);
       } else {
         // Direct conversion (no resampling needed)
-        convert_mono_to_stereo_float(data, fbuf, static_cast<int>(write_frames));
+        convert_with_channels_float(data, fbuf, static_cast<int>(write_frames),
+                                    src_channels_, dev_channels_);
       }
     } else {
       // Integer output (rare, but handle it)
@@ -342,11 +394,20 @@ namespace platf::virtual_mic {
                       : static_cast<int>(i);
         if (src_idx >= frames) src_idx = frames - 1;
 
-        opus_int16 sample = data[src_idx];
-        // Mono to stereo
-        ibuf[i * dev_channels_] = sample;
-        if (dev_channels_ > 1) {
-          ibuf[i * dev_channels_ + 1] = sample;
+        // Handle channel conversion for integer output
+        for (int ch = 0; ch < dev_channels_; ch++) {
+          opus_int16 sample;
+          if (src_channels_ == 1) {
+            // Mono source: duplicate to all channels
+            sample = data[src_idx];
+          } else if (src_channels_ >= dev_channels_) {
+            // Downmix or same: take corresponding channel
+            sample = data[src_idx * src_channels_ + ch];
+          } else {
+            // Upmix: duplicate channels
+            sample = data[src_idx * src_channels_ + (ch % src_channels_)];
+          }
+          ibuf[i * dev_channels_ + ch] = sample;
         }
       }
     }
