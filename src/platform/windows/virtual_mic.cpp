@@ -293,7 +293,7 @@ namespace platf::virtual_mic {
 
       // Allocate resample buffer (worst case: 4x expansion for sample rate + channels)
       resample_buffer_size_ = 8192 * static_cast<size_t>(dev_channels_) * 4;  // 8K frames, 4 bytes/sample
-      resample_buffer_ = static_cast<BYTE *>(CoTaskMemAlloc(resample_buffer_size_));
+      resample_buffer_ = static_cast<uint8_t *>(CoTaskMemAlloc(resample_buffer_size_));
       if (!resample_buffer_) {
         BOOST_LOG(error) << "Failed to allocate resample buffer";
         CoTaskMemFree(mix_fmt);

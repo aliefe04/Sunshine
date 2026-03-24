@@ -80,7 +80,7 @@ namespace platf::virtual_mic {
     IMFTransform *resampler_ = nullptr;
     IMFMediaType *resampler_input_type_ = nullptr;
     IMFMediaType *resampler_output_type_ = nullptr;
-    BYTE *resample_buffer_ = nullptr;
+    uint8_t *resample_buffer_ = nullptr;  // BYTE in Windows, using uint8_t for header compatibility
     size_t resample_buffer_size_ = 0;
   };
 
