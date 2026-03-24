@@ -57,8 +57,16 @@ namespace platf::virtual_mic {
     void *render_client_ = nullptr; // IAudioRenderClient*
 
     bool active_ = false;
-    int channels_ = 1;
-    int sample_rate_ = 48000;
+
+    // Source (Opus decoder) format
+    int src_channels_    = 1;
+    int src_sample_rate_ = 48000;
+
+    // Device (WASAPI mix) format — may differ from source
+    int  dev_channels_    = 1;
+    int  dev_block_align_ = 4;   ///< bytes per frame on the device
+    bool dev_is_float_    = true; ///< true = IEEE float32, false = int16
+
     uint32_t buffer_frames_ = 0;  ///< Total WASAPI shared-mode buffer size in frames
   };
 
