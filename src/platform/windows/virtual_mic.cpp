@@ -4,8 +4,8 @@
  *
  * Locates a virtual audio cable render device (VB-Cable "CABLE Input" or a
  * user-configured device name) and streams audio to it using WASAPI shared
- * mode. Handles sample rate and channel conversion using Media Foundation
- * resampler if needed.
+ * mode. Handles sample rate and channel conversion using simple linear
+ * interpolation.
  */
 
 #define INITGUID
@@ -24,9 +24,6 @@
 #include <propsys.h>
 #include <ks.h>
 #include <ksmedia.h>
-#include <mfapi.h>
-#include <mftransform.h>
-#include <mferror.h>
 
 // local includes
 #include "src/config.h"
@@ -54,28 +51,14 @@ namespace platf::virtual_mic {
   virtual_mic_output_t::~virtual_mic_output_t() {
     active_ = false;
 
-    if (resampler_) {
-      resampler_->Release();
-      resampler_ = nullptr;
-    }
-    if (resampler_input_type_) {
-      resampler_input_type_->Release();
-      resampler_input_type_ = nullptr;
-    }
-    if (resampler_output_type_) {
-      resampler_output_type_->Release();
-      resampler_output_type_ = nullptr;
-    }
-
     if (render_client_)  { as_render_client(render_client_)->Release();  render_client_  = nullptr; }
     if (audio_client_)   { as_audio_client(audio_client_)->Stop();
                            as_audio_client(audio_client_)->Release();    audio_client_   = nullptr; }
     if (device_)         { as_device(device_)->Release();                device_         = nullptr; }
 
-    CoTaskMemFree(resample_buffer_);
+    delete[] resample_buffer_;
     resample_buffer_ = nullptr;
 
-    MFShutdown();
     BOOST_LOG(info) << "Virtual mic output destroyed";
   }
 
@@ -164,13 +147,6 @@ namespace platf::virtual_mic {
       return -1;
     }
 
-    // Initialize Media Foundation for resampling
-    hr = MFStartup(MF_VERSION);
-    if (FAILED(hr)) {
-      BOOST_LOG(error) << "MFStartup failed: " << hr_to_hex(hr);
-      return -1;
-    }
-
     device_ = find_device(device_name);
     if (!device_) return -1;
 
@@ -216,89 +192,16 @@ namespace platf::virtual_mic {
                     << src_channels_ << "ch, "
                     << src_sample_rate_ << "Hz";
 
-    // Check if we need resampling
-    needs_resample_ = (dev_sample_rate_ != src_sample_rate_) || (dev_channels_ != src_channels_);
+    // Calculate resampling ratio
+    sample_ratio_ = static_cast<double>(dev_sample_rate_) / static_cast<double>(src_sample_rate_);
 
-    if (needs_resample_) {
-      BOOST_LOG(info) << "Setting up resampler: "
-                      << src_sample_rate_ << "Hz/" << src_channels_ << "ch -> "
-                      << dev_sample_rate_ << "Hz/" << dev_channels_ << "ch";
-
-      // Create resampler
-      hr = CoCreateInstance(CLSID_CResamplerMediaObject, nullptr, CLSCTX_INPROC_SERVER,
-                            __uuidof(IMFTransform), reinterpret_cast<void **>(&resampler_));
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "Failed to create resampler: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      // Create input type (source format: 16-bit PCM)
-      WAVEFORMATEX input_fmt = {};
-      input_fmt.wFormatTag = WAVE_FORMAT_PCM;
-      input_fmt.nChannels = static_cast<WORD>(src_channels_);
-      input_fmt.nSamplesPerSec = static_cast<DWORD>(src_sample_rate_);
-      input_fmt.wBitsPerSample = 16;
-      input_fmt.nBlockAlign = static_cast<WORD>(input_fmt.nChannels * input_fmt.wBitsPerSample / 8);
-      input_fmt.nAvgBytesPerSec = input_fmt.nSamplesPerSec * input_fmt.nBlockAlign;
-      input_fmt.cbSize = 0;
-
-      hr = MFCreateMediaType(&resampler_input_type_);
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "MFCreateMediaType(input) failed: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      hr = MFInitMediaTypeFromWaveFormatEx(resampler_input_type_, &input_fmt);
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "MFInitMediaTypeFromWaveFormatEx(input) failed: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      hr = resampler_->SetInputType(0, resampler_input_type_, 0);
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "SetInputType failed: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      // Create output type (device format)
-      hr = MFCreateMediaType(&resampler_output_type_);
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "MFCreateMediaType(output) failed: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      hr = MFInitMediaTypeFromWaveFormatEx(resampler_output_type_, mix_fmt);
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "MFInitMediaTypeFromWaveFormatEx(output) failed: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      hr = resampler_->SetOutputType(0, resampler_output_type_, 0);
-      if (FAILED(hr)) {
-        BOOST_LOG(error) << "SetOutputType failed: " << hr_to_hex(hr);
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
-
-      hr = resampler_->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
-      if (FAILED(hr)) {
-        BOOST_LOG(warning) << "Resampler flush failed: " << hr_to_hex(hr);
-      }
-
-      // Allocate resample buffer (worst case: 4x expansion for sample rate + channels)
-      resample_buffer_size_ = 8192 * static_cast<size_t>(dev_channels_) * 4;  // 8K frames, 4 bytes/sample
-      resample_buffer_ = static_cast<uint8_t *>(CoTaskMemAlloc(resample_buffer_size_));
-      if (!resample_buffer_) {
-        BOOST_LOG(error) << "Failed to allocate resample buffer";
-        CoTaskMemFree(mix_fmt);
-        return -1;
-      }
+    // Allocate resample buffer (worst case: 4x expansion for sample rate + channels)
+    resample_buffer_size_ = 8192 * static_cast<size_t>(dev_channels_) * 4;  // 8K frames, 4 bytes/sample
+    resample_buffer_ = new float[resample_buffer_size_ / sizeof(float)];
+    if (!resample_buffer_) {
+      BOOST_LOG(error) << "Failed to allocate resample buffer";
+      CoTaskMemFree(mix_fmt);
+      return -1;
     }
 
     constexpr REFERENCE_TIME buf_duration = 4000000;  // 400 ms in 100-ns units (larger buffer)
@@ -336,6 +239,36 @@ namespace platf::virtual_mic {
     return 0;
   }
 
+  // Simple linear interpolation resampling
+  static void resample_mono_to_stereo_float(const opus_int16 *src, float *dst,
+                                            int src_frames, int dst_frames,
+                                            double ratio) {
+    for (int i = 0; i < dst_frames; i++) {
+      double src_pos = static_cast<double>(i) / ratio;
+      int src_idx = static_cast<int>(src_pos);
+      double frac = src_pos - src_idx;
+
+      float s0 = (src_idx < src_frames) ? static_cast<float>(src[src_idx]) / 32768.0f : 0.0f;
+      float s1 = (src_idx + 1 < src_frames) ? static_cast<float>(src[src_idx + 1]) / 32768.0f : s0;
+
+      // Linear interpolation
+      float sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
+
+      // Mono to stereo (duplicate to both channels)
+      dst[i * 2] = sample;
+      dst[i * 2 + 1] = sample;
+    }
+  }
+
+  // Direct copy with format conversion (no resampling)
+  static void convert_mono_to_stereo_float(const opus_int16 *src, float *dst, int frames) {
+    for (int i = 0; i < frames; i++) {
+      float sample = static_cast<float>(src[i]) / 32768.0f;
+      dst[i * 2] = sample;
+      dst[i * 2 + 1] = sample;
+    }
+  }
+
   int virtual_mic_output_t::write_pcm(const opus_int16 *data, int frames) {
     if (!active_ || !render_client_ || !audio_client_) {
       BOOST_LOG(warning) << "write_pcm called but not active";
@@ -366,7 +299,15 @@ namespace platf::virtual_mic {
       return 0;
     }
 
-    UINT32 write_frames = std::min(static_cast<UINT32>(frames), available);
+    // Calculate how many output frames we'll produce
+    int output_frames;
+    if (sample_ratio_ != 1.0) {
+      output_frames = static_cast<int>(frames * sample_ratio_);
+    } else {
+      output_frames = frames;
+    }
+
+    UINT32 write_frames = std::min(static_cast<UINT32>(output_frames), available);
 
     BYTE *buf = nullptr;
     hr = render->GetBuffer(write_frames, &buf);
@@ -381,120 +322,31 @@ namespace platf::virtual_mic {
       return -1;
     }
 
-    // Process audio: resample if needed, or direct copy
-    if (needs_resample_ && resampler_) {
-      // Use Media Foundation resampler
-      IMFMediaBuffer *input_buffer = nullptr;
-      IMFSample *input_sample = nullptr;
+    // Convert and resample audio
+    if (dev_is_float_) {
+      auto *fbuf = reinterpret_cast<float *>(buf);
 
-      // Create input buffer
-      DWORD input_size = static_cast<DWORD>(frames * src_channels_ * sizeof(opus_int16));
-      hr = MFCreateMemoryBuffer(input_size, &input_buffer);
-      if (FAILED(hr)) {
-        BOOST_LOG(warning) << "MFCreateMemoryBuffer failed: " << hr_to_hex(hr);
-        render->ReleaseBuffer(0, 0);
-        return -1;
-      }
-
-      BYTE *input_data = nullptr;
-      hr = input_buffer->Lock(&input_data, nullptr, nullptr);
-      if (FAILED(hr)) {
-        input_buffer->Release();
-        render->ReleaseBuffer(0, 0);
-        return -1;
-      }
-
-      memcpy(input_data, data, input_size);
-      input_buffer->Unlock();
-      input_buffer->SetCurrentLength(input_size);
-
-      // Create sample
-      hr = MFCreateSample(&input_sample);
-      if (FAILED(hr)) {
-        input_buffer->Release();
-        render->ReleaseBuffer(0, 0);
-        return -1;
-      }
-
-      input_sample->AddBuffer(input_buffer);
-      input_buffer->Release();
-
-      // Process input
-      hr = resampler_->ProcessInput(0, input_sample, 0);
-      input_sample->Release();
-
-      if (FAILED(hr)) {
-        BOOST_LOG(warning) << "Resampler ProcessInput failed: " << hr_to_hex(hr);
-        render->ReleaseBuffer(0, 0);
-        return -1;
-      }
-
-      // Get output
-      MFT_OUTPUT_DATA_BUFFER output_buffer = {};
-      output_buffer.pSample = nullptr;
-
-      DWORD status = 0;
-      hr = resampler_->ProcessOutput(0, 1, &output_buffer, &status);
-
-      if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-        // Not enough input data for output - this is normal for resampling
-        // Fall back to direct copy with simple conversion
-        if (dev_is_float_) {
-          auto *fbuf = reinterpret_cast<float *>(buf);
-          for (UINT32 i = 0; i < write_frames; i++) {
-            const float s = static_cast<float>(data[i % frames]) / 32768.0f;
-            for (int ch = 0; ch < dev_channels_; ch++) {
-              fbuf[i * dev_channels_ + ch] = s;
-            }
-          }
-        } else {
-          auto *ibuf = reinterpret_cast<opus_int16 *>(buf);
-          for (UINT32 i = 0; i < write_frames; i++) {
-            for (int ch = 0; ch < dev_channels_; ch++) {
-              ibuf[i * dev_channels_ + ch] = data[i % frames];
-            }
-          }
-        }
-      } else if (FAILED(hr)) {
-        BOOST_LOG(warning) << "Resampler ProcessOutput failed: " << hr_to_hex(hr);
-        render->ReleaseBuffer(0, 0);
-        return -1;
+      if (sample_ratio_ != 1.0) {
+        // Resample from src_sample_rate to dev_sample_rate
+        resample_mono_to_stereo_float(data, fbuf, frames, static_cast<int>(write_frames), sample_ratio_);
       } else {
-        // Success - copy resampled data to WASAPI buffer
-        if (output_buffer.pSample) {
-          IMFMediaBuffer *output_media_buffer = nullptr;
-          hr = output_buffer.pSample->ConvertToContiguousBuffer(&output_media_buffer);
-          if (SUCCEEDED(hr)) {
-            BYTE *output_data = nullptr;
-            hr = output_media_buffer->Lock(&output_data, nullptr, nullptr);
-            if (SUCCEEDED(hr)) {
-              DWORD output_len = 0;
-              output_media_buffer->GetCurrentLength(&output_len);
-              DWORD copy_len = std::min(output_len, static_cast<DWORD>(write_frames * dev_block_align_));
-              memcpy(buf, output_data, copy_len);
-              output_media_buffer->Unlock();
-            }
-            output_media_buffer->Release();
-          }
-          output_buffer.pSample->Release();
-        }
+        // Direct conversion (no resampling needed)
+        convert_mono_to_stereo_float(data, fbuf, static_cast<int>(write_frames));
       }
     } else {
-      // No resampling needed - direct copy with format conversion
-      if (dev_is_float_) {
-        auto *fbuf = reinterpret_cast<float *>(buf);
-        for (UINT32 i = 0; i < write_frames; i++) {
-          const float s = static_cast<float>(data[i]) / 32768.0f;
-          for (int ch = 0; ch < dev_channels_; ch++) {
-            fbuf[i * dev_channels_ + ch] = s;
-          }
-        }
-      } else {
-        auto *ibuf = reinterpret_cast<opus_int16 *>(buf);
-        for (UINT32 i = 0; i < write_frames; i++) {
-          for (int ch = 0; ch < dev_channels_; ch++) {
-            ibuf[i * dev_channels_ + ch] = data[i];
-          }
+      // Integer output (rare, but handle it)
+      auto *ibuf = reinterpret_cast<opus_int16 *>(buf);
+      for (UINT32 i = 0; i < write_frames; i++) {
+        int src_idx = (sample_ratio_ != 1.0)
+                      ? static_cast<int>(i / sample_ratio_)
+                      : static_cast<int>(i);
+        if (src_idx >= frames) src_idx = frames - 1;
+
+        opus_int16 sample = data[src_idx];
+        // Mono to stereo
+        ibuf[i * dev_channels_] = sample;
+        if (dev_channels_ > 1) {
+          ibuf[i * dev_channels_ + 1] = sample;
         }
       }
     }

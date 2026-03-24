@@ -15,10 +15,6 @@
 // lib includes
 #include <opus/opus.h>
 
-// Forward declarations for Media Foundation
-struct IMFTransform;
-struct IMFMediaType;
-
 namespace platf::virtual_mic {
 
   /**
@@ -75,12 +71,9 @@ namespace platf::virtual_mic {
 
     uint32_t buffer_frames_ = 0;  ///< Total WASAPI shared-mode buffer size in frames
 
-    // Resampler (Media Foundation) - used when device format differs from source
-    bool needs_resample_ = false;
-    IMFTransform *resampler_ = nullptr;
-    IMFMediaType *resampler_input_type_ = nullptr;
-    IMFMediaType *resampler_output_type_ = nullptr;
-    uint8_t *resample_buffer_ = nullptr;  // BYTE in Windows, using uint8_t for header compatibility
+    // Resampling
+    double sample_ratio_ = 1.0;   ///< dev_sample_rate / src_sample_rate
+    float *resample_buffer_ = nullptr;
     size_t resample_buffer_size_ = 0;
   };
 
