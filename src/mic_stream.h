@@ -34,7 +34,7 @@ namespace mic_stream {
    */
   struct config_t {
     uint8_t audio_input_id = 0;
-    uint8_t channels = 1;
+    uint8_t channels = 2;
     uint8_t fec_percentage = 0;  ///< FEC percentage (0 = no FEC, 1-100 = FEC enabled)
     uint32_t sample_rate = SAMPLE_RATE;
     uint32_t bitrate = 64000;

@@ -1631,7 +1631,7 @@ namespace input {
           auto *pkt = reinterpret_cast<PSS_MIC_START_PACKET>(payload);
           mic_stream::config_t cfg;
           cfg.audio_input_id = pkt->audioInputId;
-          cfg.channels = pkt->channels > 0 ? pkt->channels : 1;
+          cfg.channels = pkt->channels > 0 ? pkt->channels : 2;
           cfg.fec_percentage = pkt->fecPercentage;
           cfg.sample_rate = pkt->sampleRate > 0 ? pkt->sampleRate : 48000;
           cfg.bitrate = pkt->bitrate > 0 ? pkt->bitrate : 64000;
