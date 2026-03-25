@@ -1,5 +1,5 @@
 <script setup>
-import {ref} from 'vue'
+import {ref, onMounted, watch} from 'vue'
 import {$tp} from '../../platform-i18n'
 import PlatformLayout from '../../PlatformLayout.vue'
 import AdapterNameSelector from './audiovideo/AdapterNameSelector.vue'
@@ -14,6 +14,54 @@ const props = defineProps([
 ])
 
 const config = ref(props.config)
+
+// Virtual microphone device state
+const virtualMicDevices = ref([])
+const steamMicAvailable = ref(false)
+const anyDeviceAvailable = ref(false)
+const loadingDevices = ref(false)
+const deviceError = ref('')
+
+// Fetch available virtual mic devices
+async function fetchVirtualMicDevices() {
+  if (props.platform !== 'windows') {
+    return
+  }
+  
+  loadingDevices.value = true
+  deviceError.value = ''
+  
+  try {
+    const response = await fetch('/api/virtualmic/devices')
+    if (!response.ok) {
+      throw new Error('Failed to fetch devices')
+    }
+    
+    const data = await response.json()
+    virtualMicDevices.value = data.devices || []
+    steamMicAvailable.value = data.steam_mic_available || false
+    anyDeviceAvailable.value = data.any_available || false
+  } catch (e) {
+    deviceError.value = e.message
+    console.error('Failed to fetch virtual mic devices:', e)
+  } finally {
+    loadingDevices.value = false
+  }
+}
+
+// Watch for mic passthrough being enabled
+watch(() => config.value.mic_passthrough, (newVal) => {
+  if (newVal === 'enabled' && props.platform === 'windows') {
+    fetchVirtualMicDevices()
+  }
+})
+
+// Fetch devices on mount if mic passthrough is already enabled
+onMounted(() => {
+  if (config.value.mic_passthrough === 'enabled' && props.platform === 'windows') {
+    fetchVirtualMicDevices()
+  }
+})
 </script>
 
 <template>
@@ -78,10 +126,44 @@ const config = ref(props.config)
         ></Checkbox>
 
         <div class="mb-3" v-if="config.mic_passthrough === 'enabled'">
+          <!-- Device Status -->
+          <div class="alert" :class="anyDeviceAvailable ? 'alert-success' : 'alert-warning'" v-if="!loadingDevices">
+            <div v-if="steamMicAvailable">
+              <strong>✓ Steam Streaming Microphone detected</strong> - Recommended
+            </div>
+            <div v-else-if="anyDeviceAvailable">
+              <strong>✓ Virtual audio device detected</strong> - VB-Cable or similar
+            </div>
+            <div v-else>
+              <strong>⚠ No virtual audio device found</strong><br>
+              Install <a href="https://store.steampowered.com/about/" target="_blank">Steam</a> (recommended) or 
+              <a href="https://vb-audio.com/Cable/" target="_blank">VB-Cable</a> for microphone passthrough.
+            </div>
+          </div>
+
+          <!-- Device Selector -->
           <label for="mic_virtual_device" class="form-label">{{ $t('config.mic_virtual_device') }}</label>
-          <input type="text" class="form-control" id="mic_virtual_device"
-                 placeholder="CABLE Input"
+          
+          <!-- Show dropdown if devices are available -->
+          <select v-if="virtualMicDevices.length > 0" 
+                  class="form-select" 
+                  id="mic_virtual_device"
+                  v-model="config.mic_virtual_device">
+            <option value="">Auto-detect (Steam preferred)</option>
+            <option v-for="device in virtualMicDevices" 
+                    :key="device.name" 
+                    :value="device.name">
+              {{ device.name }}
+              <span v-if="device.is_steam"> (Steam - Recommended)</span>
+              <span v-else-if="device.is_vb_cable"> (VB-Cable)</span>
+            </option>
+          </select>
+          
+          <!-- Show text input if no devices found or loading -->
+          <input v-else type="text" class="form-control" id="mic_virtual_device"
+                 placeholder="Steam Streaming Microphone"
                  v-model="config.mic_virtual_device" />
+          
           <div class="form-text">{{ $t('config.mic_virtual_device_desc') }}</div>
         </div>
       </template>
@@ -120,4 +202,27 @@ const config = ref(props.config)
 </template>
 
 <style scoped>
+.alert {
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+}
+
+.alert-success {
+  color: #0f5132;
+  background-color: #d1e7dd;
+  border-color: #badbcc;
+}
+
+.alert-warning {
+  color: #664d03;
+  background-color: #fff3cd;
+  border-color: #ffecb5;
+}
+
+.alert a {
+  color: inherit;
+  text-decoration: underline;
+}
 </style>

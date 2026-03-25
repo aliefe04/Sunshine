@@ -2,7 +2,7 @@
  * @file src/platform/windows/virtual_mic.h
  * @brief Windows WASAPI-based virtual microphone output.
  *
- * Finds a virtual audio cable device (e.g. VB-Audio Virtual Cable) and
+ * Finds a virtual audio cable device (e.g. Steam Streaming Microphone, VB-Cable) and
  * renders decoded PCM audio to it so host applications see a microphone.
  */
 
@@ -11,11 +11,38 @@
 // standard includes
 #include <cstdint>
 #include <string>
+#include <vector>
 
 // lib includes
 #include <opus/opus.h>
 
 namespace platf::virtual_mic {
+
+  /**
+   * @brief Information about a detected virtual audio device.
+   */
+  struct device_info_t {
+    std::string name;       ///< Friendly name of the device
+    std::string id;         ///< Device ID
+    bool is_steam;          ///< True if this is Steam Streaming Microphone
+    bool is_vb_cable;       ///< True if this is VB-Audio Virtual Cable
+  };
+
+  /**
+   * @brief Get list of available virtual microphone render devices.
+   * 
+   * Scans for known virtual audio devices like Steam Streaming Microphone
+   * and VB-Audio Virtual Cable.
+   * 
+   * @return Vector of detected virtual audio devices.
+   */
+  std::vector<device_info_t> get_available_devices();
+
+  /**
+   * @brief Check if Steam Streaming Microphone is installed.
+   * @return true if Steam Streaming Microphone is found.
+   */
+  bool is_steam_mic_available();
 
   /**
    * @brief Writes 16-bit PCM audio to a WASAPI render device (virtual cable input).
@@ -31,7 +58,7 @@ namespace platf::virtual_mic {
 
     /**
      * @brief Open the virtual audio device and prepare the WASAPI client.
-     * @param device_name  Friendly name substring to search for (empty = auto-detect VB-Cable).
+     * @param device_name  Friendly name substring to search for (empty = auto-detect).
      * @param channels     Number of channels (1 = mono, 2 = stereo).
      * @param sample_rate  Sample rate in Hz (e.g. 48000).
      * @return 0 on success, -1 on failure.

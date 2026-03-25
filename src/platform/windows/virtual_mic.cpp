@@ -48,6 +48,105 @@ namespace platf::virtual_mic {
     return std::string(buf);
   }
 
+  // Helper to check if a device name matches known virtual audio devices
+  static bool is_steam_streaming_mic(const std::string &name) {
+    return name.find("Steam Streaming Microphone") != std::string::npos;
+  }
+
+  static bool is_vb_cable(const std::string &name) {
+    return name.find("CABLE Input") != std::string::npos ||
+           name.find("VB-Audio") != std::string::npos;
+  }
+
+  // -----------------------------------------------------------------
+  // Public functions for device enumeration
+  // -----------------------------------------------------------------
+
+  std::vector<device_info_t> get_available_devices() {
+    std::vector<device_info_t> devices;
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
+      BOOST_LOG(error) << "CoInitializeEx failed: " << hr_to_hex(hr);
+      return devices;
+    }
+
+    IMMDeviceEnumerator *enumerator = nullptr;
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                          __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator));
+    if (FAILED(hr)) {
+      BOOST_LOG(error) << "CoCreateInstance(MMDeviceEnumerator) failed: " << hr_to_hex(hr);
+      return devices;
+    }
+
+    IMMDeviceCollection *collection = nullptr;
+    hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection);
+    enumerator->Release();
+    if (FAILED(hr)) {
+      BOOST_LOG(error) << "EnumAudioEndpoints failed: " << hr_to_hex(hr);
+      return devices;
+    }
+
+    UINT count = 0;
+    collection->GetCount(&count);
+
+    for (UINT i = 0; i < count; ++i) {
+      IMMDevice *dev = nullptr;
+      if (FAILED(collection->Item(i, &dev))) continue;
+
+      IPropertyStore *props = nullptr;
+      if (FAILED(dev->OpenPropertyStore(STGM_READ, &props))) { dev->Release(); continue; }
+
+      PROPVARIANT pv;
+      PropVariantInit(&pv);
+      if (SUCCEEDED(props->GetValue(PKEY_VirtualMic_Device_FriendlyName, &pv)) && pv.vt == VT_LPWSTR) {
+        char narrow[256] = {};
+        WideCharToMultiByte(CP_UTF8, 0, pv.pwszVal, -1, narrow, sizeof(narrow) - 1, nullptr, nullptr);
+        std::string dev_name(narrow);
+
+        // Check if this is a known virtual audio device
+        if (is_steam_streaming_mic(dev_name) || is_vb_cable(dev_name)) {
+          device_info_t info;
+          info.name = dev_name;
+          info.is_steam = is_steam_streaming_mic(dev_name);
+          info.is_vb_cable = is_vb_cable(dev_name);
+          devices.push_back(info);
+          BOOST_LOG(debug) << "Found virtual mic device: " << dev_name 
+                           << " (Steam: " << info.is_steam << ", VB-Cable: " << info.is_vb_cable << ")";
+        }
+      }
+
+      PropVariantClear(&pv);
+      props->Release();
+      dev->Release();
+    }
+
+    collection->Release();
+
+    // Sort: Steam devices first, then VB-Cable
+    std::sort(devices.begin(), devices.end(), [](const device_info_t &a, const device_info_t &b) {
+      if (a.is_steam != b.is_steam) return a.is_steam;  // Steam first
+      if (a.is_vb_cable != b.is_vb_cable) return a.is_vb_cable;  // VB-Cable second
+      return a.name < b.name;  // Alphabetical otherwise
+    });
+
+    return devices;
+  }
+
+  bool is_steam_mic_available() {
+    auto devices = get_available_devices();
+    for (const auto &dev : devices) {
+      if (dev.is_steam) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // -----------------------------------------------------------------
+  // virtual_mic_output_t
+  // -----------------------------------------------------------------
+
   virtual_mic_output_t::~virtual_mic_output_t() {
     active_ = false;
 
@@ -73,7 +172,7 @@ namespace platf::virtual_mic {
       return nullptr;
     }
 
-    // VB-Cable INPUT is a RENDER endpoint (we write audio into it)
+    // Virtual audio devices are RENDER endpoints (we write audio into them)
     IMMDeviceCollection *collection = nullptr;
     hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection);
     enumerator->Release();
@@ -87,8 +186,13 @@ namespace platf::virtual_mic {
 
     BOOST_LOG(info) << "Scanning " << count << " render devices for virtual mic...";
 
-    IMMDevice *found = nullptr;
-    for (UINT i = 0; i < count && found == nullptr; ++i) {
+    // Track best matches (prioritize Steam over VB-Cable)
+    IMMDevice *steam_device = nullptr;
+    IMMDevice *vbcable_device = nullptr;
+    IMMDevice *custom_device = nullptr;
+    std::string steam_name, vbcable_name, custom_name;
+
+    for (UINT i = 0; i < count; ++i) {
       IMMDevice *dev = nullptr;
       if (FAILED(collection->Item(i, &dev))) continue;
 
@@ -104,18 +208,27 @@ namespace platf::virtual_mic {
 
         BOOST_LOG(debug) << "  Render device: " << dev_name;
 
-        bool match;
-        if (name.empty()) {
-          match = dev_name.find("CABLE Input") != std::string::npos ||
-                  dev_name.find("VB-Audio")    != std::string::npos;
+        // If user specified a device name, look for exact match
+        if (!name.empty()) {
+          if (dev_name.find(name) != std::string::npos) {
+            BOOST_LOG(info) << "Found custom virtual mic device: " << dev_name;
+            custom_device = dev;
+            custom_name = dev_name;
+            dev = nullptr;
+          }
         } else {
-          match = dev_name.find(name) != std::string::npos;
-        }
-
-        if (match) {
-          BOOST_LOG(info) << "Found virtual mic device: " << dev_name;
-          found = dev;
-          dev = nullptr;
+          // Auto-detect: prioritize Steam Streaming Microphone over VB-Cable
+          if (is_steam_streaming_mic(dev_name) && !steam_device) {
+            BOOST_LOG(debug) << "  -> Steam Streaming Microphone detected";
+            steam_device = dev;
+            steam_name = dev_name;
+            dev = nullptr;
+          } else if (is_vb_cable(dev_name) && !vbcable_device) {
+            BOOST_LOG(debug) << "  -> VB-Cable detected";
+            vbcable_device = dev;
+            vbcable_name = dev_name;
+            dev = nullptr;
+          }
         }
       }
 
@@ -126,10 +239,32 @@ namespace platf::virtual_mic {
 
     collection->Release();
 
+    // Select device in priority order: custom > Steam > VB-Cable
+    IMMDevice *found = nullptr;
+    std::string found_name;
+
+    if (custom_device) {
+      found = custom_device;
+      found_name = custom_name;
+      BOOST_LOG(info) << "Using custom virtual mic device: " << found_name;
+    } else if (steam_device) {
+      found = steam_device;
+      found_name = steam_name;
+      BOOST_LOG(info) << "Using Steam Streaming Microphone: " << found_name;
+    } else if (vbcable_device) {
+      found = vbcable_device;
+      found_name = vbcable_name;
+      BOOST_LOG(info) << "Using VB-Cable: " << found_name;
+    }
+
+    // Release unused devices
+    if (steam_device && steam_device != found) steam_device->Release();
+    if (vbcable_device && vbcable_device != found) vbcable_device->Release();
+
     if (!found) {
-      BOOST_LOG(error) << "No virtual audio cable found. "
-                          "Install VB-Cable from https://vb-audio.com/Cable/ "
-                          "or set mic_virtual_device in sunshine.conf";
+      BOOST_LOG(error) << "No virtual audio device found. "
+                          "Install Steam (for Steam Streaming Microphone) or "
+                          "VB-Cable from https://vb-audio.com/Cable/";
     }
 
     return found;
