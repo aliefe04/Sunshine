@@ -69,13 +69,12 @@ namespace mic_stream {
     }
 
 #ifdef _WIN32
-    // Initialise the WASAPI virtual mic output
+    // Initialise the WASAPI virtual mic output (Steam Streaming Microphone)
     virtual_output_ = std::make_unique<platf::virtual_mic::virtual_mic_output_t>();
-    if (virtual_output_->init(config::audio.mic_virtual_device,
-                              static_cast<int>(config_.channels),
+    if (virtual_output_->init(static_cast<int>(config_.channels),
                               static_cast<int>(config_.sample_rate)) != 0) {
-      BOOST_LOG(error) << "Failed to initialise virtual mic output. "
-                          "Install VB-Cable from https://vb-audio.com/Cable/ or set mic_virtual_device in config."sv;
+      BOOST_LOG(error) << "Failed to initialise Steam Streaming Microphone. "
+                          "Please install Steam from https://store.steampowered.com/about/";
       opus_decoder_destroy(opus_decoder_);
       opus_decoder_ = nullptr;
       return -1;

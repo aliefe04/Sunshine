@@ -2,8 +2,8 @@
  * @file src/platform/windows/virtual_mic.h
  * @brief Windows WASAPI-based virtual microphone output.
  *
- * Finds a virtual audio cable device (e.g. Steam Streaming Microphone, VB-Cable) and
- * renders decoded PCM audio to it so host applications see a microphone.
+ * Uses Steam Streaming Microphone for audio output. Steam must be installed
+ * on the host for microphone passthrough to work.
  */
 
 #pragma once
@@ -11,32 +11,11 @@
 // standard includes
 #include <cstdint>
 #include <string>
-#include <vector>
 
 // lib includes
 #include <opus/opus.h>
 
 namespace platf::virtual_mic {
-
-  /**
-   * @brief Information about a detected virtual audio device.
-   */
-  struct device_info_t {
-    std::string name;       ///< Friendly name of the device
-    std::string id;         ///< Device ID
-    bool is_steam;          ///< True if this is Steam Streaming Microphone
-    bool is_vb_cable;       ///< True if this is VB-Audio Virtual Cable
-  };
-
-  /**
-   * @brief Get list of available virtual microphone render devices.
-   * 
-   * Scans for known virtual audio devices like Steam Streaming Microphone
-   * and VB-Audio Virtual Cable.
-   * 
-   * @return Vector of detected virtual audio devices.
-   */
-  std::vector<device_info_t> get_available_devices();
 
   /**
    * @brief Check if Steam Streaming Microphone is installed.
@@ -45,7 +24,7 @@ namespace platf::virtual_mic {
   bool is_steam_mic_available();
 
   /**
-   * @brief Writes 16-bit PCM audio to a WASAPI render device (virtual cable input).
+   * @brief Writes 16-bit PCM audio to a WASAPI render device (Steam Streaming Microphone).
    *
    * Lifecycle: construct → init() → write_pcm() repeatedly → destroy.
    * The class is NOT thread-safe; external locking is required if called from
@@ -57,13 +36,12 @@ namespace platf::virtual_mic {
     ~virtual_mic_output_t();
 
     /**
-     * @brief Open the virtual audio device and prepare the WASAPI client.
-     * @param device_name  Friendly name substring to search for (empty = auto-detect).
+     * @brief Open the Steam Streaming Microphone and prepare the WASAPI client.
      * @param channels     Number of channels (1 = mono, 2 = stereo).
      * @param sample_rate  Sample rate in Hz (e.g. 48000).
      * @return 0 on success, -1 on failure.
      */
-    int init(const std::string &device_name, int channels, int sample_rate);
+    int init(int channels, int sample_rate);
 
     /**
      * @brief Write a block of 16-bit signed PCM samples to the device.
@@ -76,8 +54,8 @@ namespace platf::virtual_mic {
     bool is_active() const { return active_; }
 
   private:
-    /** @brief Enumerate render devices and return the first name-matching one. */
-    void *find_device(const std::string &name);
+    /** @brief Find Steam Streaming Microphone device. */
+    void *find_steam_device();
 
     // Raw COM interface pointers — managed manually to avoid unique_ptr<COM> pitfalls
     void *device_ = nullptr;        // IMMDevice*

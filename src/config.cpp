@@ -513,8 +513,7 @@ namespace config {
     {},  // virtual_sink
     true,  // stream audio
     true,  // install_steam_drivers
-    false,  // mic_passthrough
-    {},  // mic_virtual_device (empty = auto-detect VB-Cable)
+    true,  // mic_passthrough (enabled by default)
   };
 
   stream_t stream {
@@ -1186,7 +1185,6 @@ namespace config {
     bool_f(vars, "stream_audio", audio.stream);
     bool_f(vars, "install_steam_audio_drivers", audio.install_steam_drivers);
     bool_f(vars, "mic_passthrough", audio.mic_passthrough);
-    string_f(vars, "mic_virtual_device", audio.mic_virtual_device);
 
     string_restricted_f(vars, "origin_web_ui_allowed", nvhttp.origin_web_ui_allowed, {"pc"sv, "lan"sv, "wan"sv});
 

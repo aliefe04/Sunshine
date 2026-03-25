@@ -15,51 +15,38 @@ const props = defineProps([
 
 const config = ref(props.config)
 
-// Virtual microphone device state
-const virtualMicDevices = ref([])
+// Steam Streaming Microphone status
 const steamMicAvailable = ref(false)
-const anyDeviceAvailable = ref(false)
-const loadingDevices = ref(false)
-const deviceError = ref('')
+const loadingStatus = ref(false)
 
-// Fetch available virtual mic devices
-async function fetchVirtualMicDevices() {
+// Fetch Steam Streaming Microphone status
+async function fetchSteamMicStatus() {
   if (props.platform !== 'windows') {
     return
   }
   
-  loadingDevices.value = true
-  deviceError.value = ''
+  loadingStatus.value = true
   
   try {
-    const response = await fetch('/api/virtualmic/devices')
+    const response = await fetch('/api/virtualmic/status')
     if (!response.ok) {
-      throw new Error('Failed to fetch devices')
+      throw new Error('Failed to fetch status')
     }
     
     const data = await response.json()
-    virtualMicDevices.value = data.devices || []
     steamMicAvailable.value = data.steam_mic_available || false
-    anyDeviceAvailable.value = data.any_available || false
   } catch (e) {
-    deviceError.value = e.message
-    console.error('Failed to fetch virtual mic devices:', e)
+    console.error('Failed to fetch Steam mic status:', e)
+    steamMicAvailable.value = false
   } finally {
-    loadingDevices.value = false
+    loadingStatus.value = false
   }
 }
 
-// Watch for mic passthrough being enabled
-watch(() => config.value.mic_passthrough, (newVal) => {
-  if (newVal === 'enabled' && props.platform === 'windows') {
-    fetchVirtualMicDevices()
-  }
-})
-
-// Fetch devices on mount if mic passthrough is already enabled
+// Fetch status on mount
 onMounted(() => {
-  if (config.value.mic_passthrough === 'enabled' && props.platform === 'windows') {
-    fetchVirtualMicDevices()
+  if (props.platform === 'windows') {
+    fetchSteamMicStatus()
   }
 })
 </script>
@@ -112,59 +99,26 @@ onMounted(() => {
                   v-model="config.install_steam_audio_drivers"
                   default="true"
         ></Checkbox>
-      </template>
-    </PlatformLayout>
 
-    <!-- Microphone Passthrough (Windows only) -->
-    <PlatformLayout :platform="platform">
-      <template #windows>
-        <Checkbox class="mb-3"
-                  id="mic_passthrough"
-                  locale-prefix="config"
-                  v-model="config.mic_passthrough"
-                  default="false"
-        ></Checkbox>
-
-        <div class="mb-3" v-if="config.mic_passthrough === 'enabled'">
-          <!-- Device Status -->
-          <div class="alert" :class="anyDeviceAvailable ? 'alert-success' : 'alert-warning'" v-if="!loadingDevices">
-            <div v-if="steamMicAvailable">
-              <strong>✓ Steam Streaming Microphone detected</strong> - Recommended
+        <!-- Microphone Passthrough Status -->
+        <div class="mb-3">
+          <label class="form-label">{{ $t('config.mic_passthrough') }}</label>
+          <div class="alert" :class="steamMicAvailable ? 'alert-success' : 'alert-warning'">
+            <div v-if="loadingStatus">
+              Checking Steam Streaming Microphone...
             </div>
-            <div v-else-if="anyDeviceAvailable">
-              <strong>✓ Virtual audio device detected</strong> - VB-Cable or similar
+            <div v-else-if="steamMicAvailable">
+              <strong>✓ Steam Streaming Microphone detected</strong><br>
+              Microphone passthrough is enabled and ready.
             </div>
             <div v-else>
-              <strong>⚠ No virtual audio device found</strong><br>
-              Install <a href="https://store.steampowered.com/about/" target="_blank">Steam</a> (recommended) or 
-              <a href="https://vb-audio.com/Cable/" target="_blank">VB-Cable</a> for microphone passthrough.
+              <strong>⚠ Steam Streaming Microphone not found</strong><br>
+              Install <a href="https://store.steampowered.com/about/" target="_blank">Steam</a> to enable microphone passthrough.
             </div>
           </div>
-
-          <!-- Device Selector -->
-          <label for="mic_virtual_device" class="form-label">{{ $t('config.mic_virtual_device') }}</label>
-          
-          <!-- Show dropdown if devices are available -->
-          <select v-if="virtualMicDevices.length > 0" 
-                  class="form-select" 
-                  id="mic_virtual_device"
-                  v-model="config.mic_virtual_device">
-            <option value="">Auto-detect (Steam preferred)</option>
-            <option v-for="device in virtualMicDevices" 
-                    :key="device.name" 
-                    :value="device.name">
-              {{ device.name }}
-              <span v-if="device.is_steam"> (Steam - Recommended)</span>
-              <span v-else-if="device.is_vb_cable"> (VB-Cable)</span>
-            </option>
-          </select>
-          
-          <!-- Show text input if no devices found or loading -->
-          <input v-else type="text" class="form-control" id="mic_virtual_device"
-                 placeholder="Steam Streaming Microphone"
-                 v-model="config.mic_virtual_device" />
-          
-          <div class="form-text">{{ $t('config.mic_virtual_device_desc') }}</div>
+          <div class="form-text">
+            {{ $t('config.mic_passthrough_desc') }}
+          </div>
         </div>
       </template>
     </PlatformLayout>

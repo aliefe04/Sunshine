@@ -1480,13 +1480,13 @@ namespace confighttp {
   }
 
   /**
-   * @brief Get available virtual microphone devices.
+   * @brief Check if Steam Streaming Microphone is available.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
    *
-   * @api_examples{/api/virtualmic/devices| GET| null}
+   * @api_examples{/api/virtualmic/status| GET| null}
    */
-  void getVirtualMicDevices(const resp_https_t &response, const req_https_t &request) {
+  void getVirtualMicStatus(const resp_https_t &response, const req_https_t &request) {
     if (!authenticate(response, request)) {
       return;
     }
@@ -1496,25 +1496,10 @@ namespace confighttp {
     nlohmann::json output_tree;
 
 #ifdef _WIN32
-    auto devices = platf::virtual_mic::get_available_devices();
-    
-    nlohmann::json devices_json = nlohmann::json::array();
-    for (const auto &dev : devices) {
-      nlohmann::json device_json;
-      device_json["name"] = dev.name;
-      device_json["is_steam"] = dev.is_steam;
-      device_json["is_vb_cable"] = dev.is_vb_cable;
-      devices_json.push_back(device_json);
-    }
-    
-    output_tree["devices"] = devices_json;
     output_tree["steam_mic_available"] = platf::virtual_mic::is_steam_mic_available();
-    output_tree["any_available"] = !devices.empty();
 #else
-    output_tree["error"] = "Virtual microphone devices are only available on Windows";
-    output_tree["devices"] = nlohmann::json::array();
+    output_tree["error"] = "Virtual microphone is only available on Windows";
     output_tree["steam_mic_available"] = false;
-    output_tree["any_available"] = false;
 #endif
 
     send_response(response, output_tree);
@@ -1771,7 +1756,7 @@ namespace confighttp {
     server.resource["^/api/restart$"]["POST"] = restart;
     server.resource["^/api/vigembus/status$"]["GET"] = getViGEmBusStatus;
     server.resource["^/api/vigembus/install$"]["POST"] = installViGEmBus;
-    server.resource["^/api/virtualmic/devices$"]["GET"] = getVirtualMicDevices;
+    server.resource["^/api/virtualmic/status$"]["GET"] = getVirtualMicStatus;
 
     // static/dynamic resources
     server.resource["^/images/sunshine.ico$"]["GET"] = getFaviconImage;
