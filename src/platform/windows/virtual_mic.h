@@ -51,33 +51,35 @@ namespace platf::virtual_mic {
      */
     int write_pcm(const opus_int16 *data, int frames);
 
-    bool is_active() const { return active_; }
+    bool is_active() const {
+      return active_;
+    }
 
   private:
     /** @brief Find Steam Streaming Microphone device. */
     void *find_steam_device();
 
     // Raw COM interface pointers — managed manually to avoid unique_ptr<COM> pitfalls
-    void *device_ = nullptr;        // IMMDevice*
+    void *device_ = nullptr;  // IMMDevice*
     void *audio_client_ = nullptr;  // IAudioClient*
-    void *render_client_ = nullptr; // IAudioRenderClient*
+    void *render_client_ = nullptr;  // IAudioRenderClient*
 
     bool active_ = false;
 
     // Source (Opus decoder) format
-    int src_channels_    = 1;
+    int src_channels_ = 1;
     int src_sample_rate_ = 48000;
 
     // Device (WASAPI mix) format — may differ from source
-    int  dev_channels_    = 1;
-    int  dev_sample_rate_ = 48000;
-    int  dev_block_align_ = 4;   ///< bytes per frame on the device
-    bool dev_is_float_    = true; ///< true = IEEE float32, false = int16
+    int dev_channels_ = 1;
+    int dev_sample_rate_ = 48000;
+    int dev_block_align_ = 4;  ///< bytes per frame on the device
+    bool dev_is_float_ = true;  ///< true = IEEE float32, false = int16
 
     uint32_t buffer_frames_ = 0;  ///< Total WASAPI shared-mode buffer size in frames
 
     // Resampling
-    double sample_ratio_ = 1.0;   ///< dev_sample_rate / src_sample_rate
+    double sample_ratio_ = 1.0;  ///< dev_sample_rate / src_sample_rate
     float *resample_buffer_ = nullptr;
     size_t resample_buffer_size_ = 0;
   };

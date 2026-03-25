@@ -65,8 +65,13 @@ namespace mic_stream {
      */
     int process_opus_data(const uint8_t *data, size_t size);
 
-    bool is_active() const { return active_; }
-    const config_t &config() const { return config_; }
+    bool is_active() const {
+      return active_;
+    }
+
+    const config_t &config() const {
+      return config_;
+    }
 
   private:
     config_t config_;

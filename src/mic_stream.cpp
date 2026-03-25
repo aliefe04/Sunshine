@@ -30,8 +30,8 @@ namespace mic_stream {
   // mic_stream_t
   // -----------------------------------------------------------------
 
-  mic_stream_t::mic_stream_t(const config_t &cfg)
-      : config_(cfg) {
+  mic_stream_t::mic_stream_t(const config_t &cfg):
+      config_(cfg) {
     // Pre-allocate PCM scratch buffer for the maximum expected frame size
     pcm_buffer_.resize(SAMPLES_PER_FRAME * cfg.channels);
   }
@@ -53,7 +53,8 @@ namespace mic_stream {
     opus_decoder_ = opus_decoder_create(
       static_cast<opus_int32>(config_.sample_rate),
       static_cast<int>(config_.channels),
-      &opus_error);
+      &opus_error
+    );
 
     if (opus_error != OPUS_OK || !opus_decoder_) {
       BOOST_LOG(error) << "Opus decoder creation failed: "sv << opus_strerror(opus_error);
@@ -71,8 +72,7 @@ namespace mic_stream {
 #ifdef _WIN32
     // Initialise the WASAPI virtual mic output (Steam Streaming Microphone)
     virtual_output_ = std::make_unique<platf::virtual_mic::virtual_mic_output_t>();
-    if (virtual_output_->init(static_cast<int>(config_.channels),
-                              static_cast<int>(config_.sample_rate)) != 0) {
+    if (virtual_output_->init(static_cast<int>(config_.channels), static_cast<int>(config_.sample_rate)) != 0) {
       BOOST_LOG(error) << "Failed to initialise Steam Streaming Microphone. "
                           "Please install Steam from https://store.steampowered.com/about/";
       opus_decoder_destroy(opus_decoder_);
@@ -121,7 +121,7 @@ namespace mic_stream {
     // If FEC is enabled and we have a missing frame, decode_fec=1 recovers it
     // For normal decoding, decode_fec=0
     int decode_fec = 0;
-    
+
     // Try to decode with FEC recovery if enabled
     // This will recover the previous frame if it was lost
     int decoded_samples = opus_decode(
@@ -130,7 +130,8 @@ namespace mic_stream {
       static_cast<opus_int32>(size),
       pcm_buffer_.data(),
       SAMPLES_PER_FRAME,
-      decode_fec);
+      decode_fec
+    );
 
     if (decoded_samples < 0) {
       BOOST_LOG(error) << "Opus decode error: "sv << opus_strerror(decoded_samples);

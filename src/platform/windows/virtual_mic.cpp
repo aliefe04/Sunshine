@@ -15,13 +15,13 @@
 #include <string>
 
 // Windows includes
-#include <windows.h>
 #include <Audioclient.h>
+#include <ks.h>
+#include <ksmedia.h>
 #include <mmdeviceapi.h>
 #include <mmreg.h>
 #include <propsys.h>
-#include <ks.h>
-#include <ksmedia.h>
+#include <windows.h>
 
 // local includes
 #include "src/config.h"
@@ -29,15 +29,22 @@
 #include "virtual_mic.h"
 
 // PKEY_Device_FriendlyName GUID
-DEFINE_PROPERTYKEY(PKEY_VirtualMic_Device_FriendlyName,
-  0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0, 14);
+DEFINE_PROPERTYKEY(PKEY_VirtualMic_Device_FriendlyName, 0xa45c254e, 0xdf1c, 0x4efd, 0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0, 14);
 
 namespace platf::virtual_mic {
   using namespace std::literals;
 
-  static inline IMMDevice       *as_device(void *p)        { return static_cast<IMMDevice *>(p); }
-  static inline IAudioClient    *as_audio_client(void *p)  { return static_cast<IAudioClient *>(p); }
-  static inline IAudioRenderClient *as_render_client(void *p) { return static_cast<IAudioRenderClient *>(p); }
+  static inline IMMDevice *as_device(void *p) {
+    return static_cast<IMMDevice *>(p);
+  }
+
+  static inline IAudioClient *as_audio_client(void *p) {
+    return static_cast<IAudioClient *>(p);
+  }
+
+  static inline IAudioRenderClient *as_render_client(void *p) {
+    return static_cast<IAudioRenderClient *>(p);
+  }
 
   // Helper to convert HRESULT to hex string for logging
   static std::string hr_to_hex(HRESULT hr) {
@@ -57,8 +64,7 @@ namespace platf::virtual_mic {
     }
 
     IMMDeviceEnumerator *enumerator = nullptr;
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                          __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator));
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator));
     if (FAILED(hr)) {
       return false;
     }
@@ -76,10 +82,15 @@ namespace platf::virtual_mic {
     bool found = false;
     for (UINT i = 0; i < count && !found; ++i) {
       IMMDevice *dev = nullptr;
-      if (FAILED(collection->Item(i, &dev))) continue;
+      if (FAILED(collection->Item(i, &dev))) {
+        continue;
+      }
 
       IPropertyStore *props = nullptr;
-      if (FAILED(dev->OpenPropertyStore(STGM_READ, &props))) { dev->Release(); continue; }
+      if (FAILED(dev->OpenPropertyStore(STGM_READ, &props))) {
+        dev->Release();
+        continue;
+      }
 
       PROPVARIANT pv;
       PropVariantInit(&pv);
@@ -109,10 +120,19 @@ namespace platf::virtual_mic {
   virtual_mic_output_t::~virtual_mic_output_t() {
     active_ = false;
 
-    if (render_client_)  { as_render_client(render_client_)->Release();  render_client_  = nullptr; }
-    if (audio_client_)   { as_audio_client(audio_client_)->Stop();
-                           as_audio_client(audio_client_)->Release();    audio_client_   = nullptr; }
-    if (device_)         { as_device(device_)->Release();                device_         = nullptr; }
+    if (render_client_) {
+      as_render_client(render_client_)->Release();
+      render_client_ = nullptr;
+    }
+    if (audio_client_) {
+      as_audio_client(audio_client_)->Stop();
+      as_audio_client(audio_client_)->Release();
+      audio_client_ = nullptr;
+    }
+    if (device_) {
+      as_device(device_)->Release();
+      device_ = nullptr;
+    }
 
     delete[] resample_buffer_;
     resample_buffer_ = nullptr;
@@ -124,8 +144,7 @@ namespace platf::virtual_mic {
     HRESULT hr;
 
     IMMDeviceEnumerator *enumerator = nullptr;
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                          __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator));
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void **>(&enumerator));
     if (FAILED(hr)) {
       BOOST_LOG(error) << "CoCreateInstance(MMDeviceEnumerator) failed: " << hr_to_hex(hr);
       return nullptr;
@@ -147,10 +166,15 @@ namespace platf::virtual_mic {
     IMMDevice *found = nullptr;
     for (UINT i = 0; i < count && !found; ++i) {
       IMMDevice *dev = nullptr;
-      if (FAILED(collection->Item(i, &dev))) continue;
+      if (FAILED(collection->Item(i, &dev))) {
+        continue;
+      }
 
       IPropertyStore *props = nullptr;
-      if (FAILED(dev->OpenPropertyStore(STGM_READ, &props))) { dev->Release(); continue; }
+      if (FAILED(dev->OpenPropertyStore(STGM_READ, &props))) {
+        dev->Release();
+        continue;
+      }
 
       PROPVARIANT pv;
       PropVariantInit(&pv);
@@ -170,7 +194,9 @@ namespace platf::virtual_mic {
 
       PropVariantClear(&pv);
       props->Release();
-      if (dev) dev->Release();
+      if (dev) {
+        dev->Release();
+      }
     }
 
     collection->Release();
@@ -184,7 +210,7 @@ namespace platf::virtual_mic {
   }
 
   int virtual_mic_output_t::init(int channels, int sample_rate) {
-    src_channels_   = channels;
+    src_channels_ = channels;
     src_sample_rate_ = sample_rate;
 
     // CoInitializeEx is idempotent — call on every thread that uses WASAPI
@@ -195,12 +221,13 @@ namespace platf::virtual_mic {
     }
 
     device_ = find_steam_device();
-    if (!device_) return -1;
+    if (!device_) {
+      return -1;
+    }
 
     // Activate audio client
     IAudioClient *client = nullptr;
-    hr = as_device(device_)->Activate(__uuidof(IAudioClient), CLSCTX_ALL,
-                                       nullptr, reinterpret_cast<void **>(&client));
+    hr = as_device(device_)->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void **>(&client));
     if (FAILED(hr)) {
       BOOST_LOG(error) << "IAudioClient::Activate failed: " << hr_to_hex(hr);
       return -1;
@@ -215,7 +242,7 @@ namespace platf::virtual_mic {
       return -1;
     }
 
-    dev_channels_    = static_cast<int>(mix_fmt->nChannels);
+    dev_channels_ = static_cast<int>(mix_fmt->nChannels);
     dev_sample_rate_ = static_cast<int>(mix_fmt->nSamplesPerSec);
     dev_block_align_ = static_cast<int>(mix_fmt->nBlockAlign);
 
@@ -287,9 +314,7 @@ namespace platf::virtual_mic {
   }
 
   // Simple linear interpolation resampling with channel conversion
-  static void resample_with_channels_float(const opus_int16 *src, float *dst,
-                                           int src_frames, int dst_frames,
-                                           double ratio, int src_channels, int dst_channels) {
+  static void resample_with_channels_float(const opus_int16 *src, float *dst, int src_frames, int dst_frames, double ratio, int src_channels, int dst_channels) {
     for (int i = 0; i < dst_frames; i++) {
       double src_pos = static_cast<double>(i) / ratio;
       int src_idx = static_cast<int>(src_pos);
@@ -298,7 +323,7 @@ namespace platf::virtual_mic {
       // For each output channel
       for (int ch = 0; ch < dst_channels; ch++) {
         float sample = 0.0f;
-        
+
         if (src_channels == 1 && dst_channels >= 1) {
           // Mono to stereo/multi-channel: duplicate mono to all channels
           float s0 = (src_idx < src_frames) ? static_cast<float>(src[src_idx]) / 32768.0f : 0.0f;
@@ -330,19 +355,18 @@ namespace platf::virtual_mic {
           float s1 = (src_idx + 1 < src_frames) ? static_cast<float>(src[(src_idx + 1) * src_channels + src_ch]) / 32768.0f : s0;
           sample = s0 * (1.0f - static_cast<float>(frac)) + s1 * static_cast<float>(frac);
         }
-        
+
         dst[i * dst_channels + ch] = sample;
       }
     }
   }
 
   // Direct copy with format conversion (no resampling)
-  static void convert_with_channels_float(const opus_int16 *src, float *dst, int frames,
-                                          int src_channels, int dst_channels) {
+  static void convert_with_channels_float(const opus_int16 *src, float *dst, int frames, int src_channels, int dst_channels) {
     for (int i = 0; i < frames; i++) {
       for (int ch = 0; ch < dst_channels; ch++) {
         float sample = 0.0f;
-        
+
         if (src_channels == 1 && dst_channels >= 1) {
           // Mono to stereo/multi-channel: duplicate mono to all channels
           sample = static_cast<float>(src[i]) / 32768.0f;
@@ -360,7 +384,7 @@ namespace platf::virtual_mic {
           int src_ch = ch % src_channels;
           sample = static_cast<float>(src[i * src_channels + src_ch]) / 32768.0f;
         }
-        
+
         dst[i * dst_channels + ch] = sample;
       }
     }
@@ -372,7 +396,7 @@ namespace platf::virtual_mic {
       return -1;
     }
 
-    IAudioClient       *client = as_audio_client(audio_client_);
+    IAudioClient *client = as_audio_client(audio_client_);
     IAudioRenderClient *render = as_render_client(render_client_);
 
     UINT32 padding = 0;
@@ -425,21 +449,19 @@ namespace platf::virtual_mic {
 
       if (sample_ratio_ != 1.0) {
         // Resample from src_sample_rate to dev_sample_rate
-        resample_with_channels_float(data, fbuf, frames, static_cast<int>(write_frames),
-                                     sample_ratio_, src_channels_, dev_channels_);
+        resample_with_channels_float(data, fbuf, frames, static_cast<int>(write_frames), sample_ratio_, src_channels_, dev_channels_);
       } else {
         // Direct conversion (no resampling needed)
-        convert_with_channels_float(data, fbuf, static_cast<int>(write_frames),
-                                    src_channels_, dev_channels_);
+        convert_with_channels_float(data, fbuf, static_cast<int>(write_frames), src_channels_, dev_channels_);
       }
     } else {
       // Integer output (rare, but handle it)
       auto *ibuf = reinterpret_cast<opus_int16 *>(buf);
       for (UINT32 i = 0; i < write_frames; i++) {
-        int src_idx = (sample_ratio_ != 1.0)
-                      ? static_cast<int>(i / sample_ratio_)
-                      : static_cast<int>(i);
-        if (src_idx >= frames) src_idx = frames - 1;
+        int src_idx = (sample_ratio_ != 1.0) ? static_cast<int>(i / sample_ratio_) : static_cast<int>(i);
+        if (src_idx >= frames) {
+          src_idx = frames - 1;
+        }
 
         // Handle channel conversion for integer output
         for (int ch = 0; ch < dev_channels_; ch++) {

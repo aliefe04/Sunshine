@@ -24,15 +24,15 @@ async function fetchSteamMicStatus() {
   if (props.platform !== 'windows') {
     return
   }
-  
+
   loadingStatus.value = true
-  
+
   try {
     const response = await fetch('/api/virtualmic/status')
     if (!response.ok) {
       throw new Error('Failed to fetch status')
     }
-    
+
     const data = await response.json()
     steamMicAvailable.value = data.steam_mic_available || false
   } catch (e) {
