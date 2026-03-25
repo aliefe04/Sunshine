@@ -25,9 +25,9 @@ namespace platf::virtual_mic {
 #endif
 
 namespace mic_stream {
-  constexpr int SAMPLE_RATE = 48000;
+  constexpr int SAMPLE_RATE = 44100;  // Match Steam Streaming Microphone
   constexpr int FRAME_DURATION_MS = 20;
-  constexpr int SAMPLES_PER_FRAME = SAMPLE_RATE * FRAME_DURATION_MS / 1000;  // 960
+  constexpr int SAMPLES_PER_FRAME = SAMPLE_RATE * FRAME_DURATION_MS / 1000;  // 882
 
   /**
    * @brief Per-stream configuration negotiated during RTSP setup.
